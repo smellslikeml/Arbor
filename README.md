@@ -420,3 +420,22 @@ Released under the [Apache License 2.0](LICENSE).
 
 Built at the Gaoling School of Artificial Intelligence, Renmin University of China, and
 Microsoft Research.
+
+---
+
+## 🧷 Experiment memory (pre-action failure gate)
+
+Executors run in fresh worktrees and "have no memory of the parent", so across a long run
+they can re-try approaches that already failed. Each cycle now appends a typed *outcome*
+event (hypothesis, score, status, insight) to an append-only, plain-text log at
+`<workspace>/experiment_memory.jsonl`. Before the next Executor is dispatched, a
+**deterministic gate** projects that log into a compact warning — surfaced through the
+existing additional-context channel — listing prior experiments whose hypothesis resembles
+the new one and which did **not** beat the baseline, so the Executor pursues a different
+angle instead of repeating a known dead end. The log is local-first, offline, and doubles as
+an auditable provenance trail. This complements the success-only ancestor insights already
+propagated up the Idea Tree.
+
+Adapted from *PROJECTMEM: A Local-First, Event-Sourced Memory and Judgment Layer for AI
+Coding Agents* ([arXiv:2606.12329](https://arxiv.org/abs/2606.12329)) — the paper's
+"Memory-as-Governance" idea, scoped to the Coordinator's executor dispatch path.

@@ -24,6 +24,7 @@ from ...core.git_artifacts import filter_commit_paths
 from ..hitl import await_user_decision
 from .tree_ops import propagate_insights
 from .git_ops import _run_git
+from .experiment_memory import record_outcome, recall_prior_failures
 
 if TYPE_CHECKING:
     from ..config import CoordinatorConfig
@@ -106,6 +107,22 @@ async def _save_experiment_artifacts(
             config.cwd,
         )
         (exp_dir / "diff.patch").write_text(full_diff, encoding="utf-8")
+
+    # Emit an outcome event into the append-only experiment-memory log so a
+    # later executor can be warned against repeating this approach if it fails.
+    status = "failed" if raw_report.startswith("[Error") else (
+        "timeout" if raw_report.startswith("[Timed out") else "done"
+    )
+    record_outcome(
+        workspace,
+        node_id=node_id,
+        hypothesis=hypothesis,
+        score=parsed.get("score"),
+        insight=parsed.get("insight", ""),
+        result=parsed.get("result", ""),
+        branch=actual_branch,
+        status=status,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -572,12 +589,22 @@ async def _run_single_executor(
             worktree_cwd=str(worktree_path),
             node_id=node_id,
         )
+        # Pre-action gate: warn against repeating approaches that already
+        # failed (recorded in the experiment-memory log by prior cycles).
+        prior_failures = recall_prior_failures(
+            config.workspace_dir,
+            node.hypothesis,
+            baseline_score=tree.meta.get("baseline_score"),
+        )
+        executor_context = "\n\n".join(
+            part for part in (additional_context, prior_failures) if part
+        ) or None
         prompt = _build_executor_prompt(
             worktree_path=worktree_path,
             node=node,
             ancestor_insights=ancestor_insights,
             eval_info=eval_info,
-            additional_context=additional_context,
+            additional_context=executor_context,
         )
 
         log.info(
