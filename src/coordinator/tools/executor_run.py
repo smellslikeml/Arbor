@@ -21,6 +21,7 @@ from typing import Any, TYPE_CHECKING
 
 from ...core.tools.base import Tool
 from ...core.git_artifacts import filter_commit_paths
+from ..branch_budget_recommender import BranchBudgetRecommender
 from ..hitl import await_user_decision
 from .tree_ops import propagate_insights
 from .git_ops import _run_git
@@ -52,6 +53,20 @@ def _completed_cycles(tree: "IdeaTree") -> int:
         1 for n in tree.get_all_nodes()
         if n.id != tree.root_id and n.status in _CYCLE_STATUSES
     )
+
+
+def _with_budget_recommendation(
+    intervention: str, tree: "IdeaTree", config: "CoordinatorConfig"
+) -> str:
+    """Append a UCB fixed-budget branch recommendation to a convergence
+    intervention, advising which surviving branch should get the remaining
+    cycle budget. No-ops when allocation is moot (≤1 scored branch / no budget).
+    """
+    remaining = config.max_cycles - _completed_cycles(tree)
+    rec = BranchBudgetRecommender(tree, config).recommend(remaining)
+    if rec is None:
+        return intervention
+    return intervention + "\n\n" + BranchBudgetRecommender.format_recommendation(rec)
 
 
 async def _save_experiment_artifacts(
@@ -839,6 +854,8 @@ class RunExecutorTool(Tool):
             signal = self._convergence_detector.on_experiment_complete(kwargs["node_id"])
             if signal:
                 intervention = self._convergence_detector.format_intervention(signal)
+                intervention = _with_budget_recommendation(
+                    intervention, self._tree, self._config)
                 result += f"\n\n---\n{intervention}\n---"
                 if signal.level == "stop":
                     self._convergence_detector.write_stop_signal(self._config.workspace_dir)
@@ -1042,6 +1059,8 @@ class RunExecutorParallelTool(Tool):
                 signal = self._convergence_detector.on_experiment_complete(task["node_id"])
             if signal:
                 intervention = self._convergence_detector.format_intervention(signal)
+                intervention = _with_budget_recommendation(
+                    intervention, self._tree, self._config)
                 combined += f"\n\n---\n{intervention}\n---"
                 if signal.level == "stop":
                     self._convergence_detector.write_stop_signal(self._config.workspace_dir)
