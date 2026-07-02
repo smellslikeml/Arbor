@@ -233,6 +233,21 @@ ROOT (baseline: 20%)
 - **Depth 1:** research directions (paper-title-level ideas).
 - **Depth 2+:** concrete methods, implemented and tested by Executors.
 
+### Budget-aware branch selection
+
+When a plateau is detected, the convergence signal now carries a **fixed-budget
+branch recommendation**. Arbor treats each top-level branch as an arm of a
+best-arm-identification problem (Executor scores are reward samples) and the
+unspent portion of `max_cycles` as a fixed budget, then ranks the surviving
+branches by a Bayesian upper-confidence bound whose exploration weight scales
+with the remaining budget — favoring promising-but-under-sampled branches early
+and collapsing toward the best posterior mean as the budget runs out. The
+advisory is injected into the Coordinator's context at the DECIDE step so it can
+direct remaining compute toward the branch most worth backing.
+
+Adapted from [UCB Exploration for Fixed-Budget Bayesian Best Arm
+Identification](https://arxiv.org/abs/2408.04869).
+
 ### Git strategy & evaluation
 
 Each Executor works in its own worktree on a dedicated branch. Verified improvements merge
